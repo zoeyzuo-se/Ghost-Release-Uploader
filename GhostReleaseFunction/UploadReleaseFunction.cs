@@ -76,9 +76,24 @@ namespace GhostVersionFunctionApp
                 await wc.DownloadFileTaskAsync(new Uri(releaseUrl), ghostZipLocalUri);
             }
 
-            using (ZipArchive archive = new ZipArchive(File.OpenRead(ghostZipLocalUri), ZipArchiveMode.Read))
+            using (ZipArchive zip = new ZipArchive(File.OpenRead(ghostZipLocalUri), ZipArchiveMode.Read))
             {
-                archive.ExtractToDirectory(destination.FullName);
+                foreach (ZipArchiveEntry entry in zip.Entries)
+                {
+                    //make sure it's not a folder
+                    if (!string.IsNullOrEmpty(Path.GetExtension(entry.FullName)) || entry.FullName == "LICENSE")
+                    {
+                        var deflateStream = entry.Open();
+                        using (var fileStream = File.Create(Path.Combine(destination.FullName, entry.FullName)))
+                        {
+                            deflateStream.CopyTo(fileStream);
+                        }
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(Path.Combine(destination.FullName, entry.FullName));
+                    }
+                }
             }
 
             File.Delete(ghostZipLocalUri);
@@ -89,35 +104,43 @@ namespace GhostVersionFunctionApp
         {
             var resourcesPath = context.FunctionAppDirectory;
             var repoPath = Path.GetFullPath(Path.Combine(resourcesPath, @"..\Target-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmss")));
-
-            var co = new CloneOptions
+            try
             {
-                CredentialsProvider = Handler
-            };
-            var gitPath = Repository.Clone($"https://github.com/{GitRepoOwner}/{GitRepoName}.git", repoPath, co);
-            using (var repo = new Repository(gitPath))
-            {
-                var repoDir = new DirectoryInfo(repoPath);
-                repoDir.Empty(true);
-
-                await DownloadGhostVersion(repoDir, funcParams.ReleaseUrl);
-
-                EnrichPackageJson(repoDir);
-
-                var azureResourcesDir = new DirectoryInfo(Path.Combine(resourcesPath, "AzureDeployment"));
-                azureResourcesDir.CopyFilesRecursively(repoDir);
-
-                Commands.Stage(repo, "*");
-
-                var author = new Signature(GitAuthorName, GitAuthorEmail, DateTime.Now);
-                var commit = repo.Commit($"Add v{funcParams.ReleaseName}", author, author);
-                var options = new PushOptions
+                var co = new CloneOptions
                 {
                     CredentialsProvider = Handler
                 };
-                repo.Network.Push(repo.Branches[GitRepoBranch], options);
+                var gitPath = Repository.Clone($"https://github.com/{GitRepoOwner}/{GitRepoName}.git", repoPath, co);
+                using (var repo = new Repository(gitPath))
+                {
+                    var repoDir = new DirectoryInfo(repoPath);
+                    repoDir.Empty(true);
 
-                await CreateRelease(funcParams.ReleaseName, funcParams.ReleaseNotes);
+                    await DownloadGhostVersion(repoDir, funcParams.ReleaseUrl);
+
+                    EnrichPackageJson(repoDir);
+
+                    var azureResourcesDir = new DirectoryInfo(Path.Combine(resourcesPath, "AzureDeployment"));
+                    azureResourcesDir.CopyFilesRecursively(repoDir);
+
+                    Commands.Stage(repo, "*");
+
+                    var author = new Signature(GitAuthorName, GitAuthorEmail, DateTime.Now);
+                    var commit = repo.Commit($"Add v{funcParams.ReleaseName}", author, author);
+                    var options = new PushOptions
+                    {
+                        CredentialsProvider = Handler
+                    };
+                    repo.Network.Push(repo.Branches[GitRepoBranch], options);
+
+                    await CreateRelease(funcParams.ReleaseName, funcParams.ReleaseNotes);
+                }
+            }
+            catch (Exception e)
+            {
+                log.Error(e.Message);
+                log.Error(e.StackTrace);
+                return "failed: " + e.Message;
             }
 
             return "finished";
