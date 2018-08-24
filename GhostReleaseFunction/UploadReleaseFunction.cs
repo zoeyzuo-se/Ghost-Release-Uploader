@@ -4,7 +4,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using LibGit2Sharp;
@@ -77,7 +76,7 @@ namespace GhostVersionFunctionApp
                 await wc.DownloadFileTaskAsync(new Uri(releaseUrl), ghostZipLocalUri);
             }
 
-            using (ZipArchive archive = ZipFile.OpenRead(ghostZipLocalUri))
+            using (ZipArchive archive = new ZipArchive(File.OpenRead(ghostZipLocalUri), ZipArchiveMode.Read))
             {
                 archive.ExtractToDirectory(destination.FullName);
             }
@@ -86,10 +85,9 @@ namespace GhostVersionFunctionApp
         }
 
         [FunctionName("ghost-release")]
-        public static async Task<string> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = null)]FunctionParams funcParams, TraceWriter log)
+        public static async Task<string> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = null)]FunctionParams funcParams, TraceWriter log, ExecutionContext context)
         {
-            var binFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var resourcesPath = Path.GetFullPath(Path.Combine(binFolder, @"..\"));
+            var resourcesPath = context.FunctionAppDirectory;
             var repoPath = Path.GetFullPath(Path.Combine(resourcesPath, @"..\Target-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmss")));
 
             var co = new CloneOptions
