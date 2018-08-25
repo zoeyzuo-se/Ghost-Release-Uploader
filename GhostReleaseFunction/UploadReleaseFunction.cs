@@ -1,8 +1,6 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -57,50 +55,37 @@ namespace GhostVersionFunctionApp
             }
         }
 
-        private static void EnrichPackageJson(DirectoryInfo target)
-        {
-            var packageJsonLocation = Path.Combine(target.FullName, "package.json");
-            string json = File.ReadAllText(packageJsonLocation);
-            dynamic jsonObj = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
-            jsonObj.engines.node = ((string)jsonObj.engines.node).Split(new[] { "||" }, StringSplitOptions.None).LastOrDefault().Trim();
-            jsonObj.dependencies.applicationinsights = "^1.0.0";
-            string output = Newtonsoft.Json.JsonConvert.SerializeObject(jsonObj, Newtonsoft.Json.Formatting.Indented);
-            File.WriteAllText(packageJsonLocation, output);
-        }
-
-        private static async Task DownloadGhostVersion(DirectoryInfo destination, string releaseUrl)
-        {
-            var ghostZipLocalUri = Path.Combine(destination.FullName, "ghost.zip");
-            using (WebClient wc = new WebClient())
-            {
-                await wc.DownloadFileTaskAsync(new Uri(releaseUrl), ghostZipLocalUri);
-            }
-
-            using (ZipArchive zip = new ZipArchive(File.OpenRead(ghostZipLocalUri), ZipArchiveMode.Read))
-            {
-                foreach (ZipArchiveEntry entry in zip.Entries)
-                {
-                    //make sure it's not a folder
-                    if (!string.IsNullOrEmpty(Path.GetExtension(entry.FullName)) || entry.FullName == "LICENSE")
-                    {
-                        var deflateStream = entry.Open();
-                        using (var fileStream = File.Create(Path.Combine(destination.FullName, entry.FullName)))
-                        {
-                            deflateStream.CopyTo(fileStream);
-                        }
-                    }
-                    else
-                    {
-                        Directory.CreateDirectory(Path.Combine(destination.FullName, entry.FullName));
-                    }
-                }
-            }
-
-            File.Delete(ghostZipLocalUri);
-        }
-
         [FunctionName("ghost-release")]
-        public static async Task<string> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = null)]FunctionParams funcParams, TraceWriter log, ExecutionContext context)
+        public static async Task<HttpResponseMessage> HttpStart(
+            [HttpTrigger(AuthorizationLevel.Function, "post")]HttpRequestMessage req,
+            [OrchestrationClient]DurableOrchestrationClient starter,
+            TraceWriter log)
+        {
+            // Function input comes from the request content.
+            FunctionParams requestData = await req.Content.ReadAsAsync<FunctionParams>();
+
+            // Starting a new orchestrator with request data
+            string instanceId = await starter.StartNewAsync("HttpTrigger_Orchestrator", requestData);
+
+            log.Info($"Started orchestration with ID = '{instanceId}'.");
+
+            var response = starter.CreateCheckStatusResponse(req, instanceId);
+            return response;
+        }
+
+        [FunctionName("HttpTrigger_Orchestrator")]
+        public static async Task<List<string>> RunOrchestrator(
+            [OrchestrationTrigger] DurableOrchestrationContext context)
+        {
+            var outputs = new List<string>();
+
+            outputs.Add(await context.CallActivityAsync<string>("Trigger_Prepare_Version", context.GetInput<FunctionParams>()));
+
+            return outputs;
+        }
+
+        [FunctionName("Trigger_Prepare_Version")]
+        public static async Task<string> Run([ActivityTrigger]FunctionParams funcParams, TraceWriter log, ExecutionContext context)
         {
             var resourcesPath = context.FunctionAppDirectory;
             var repoPath = Path.GetFullPath(Path.Combine(resourcesPath, @"..\Target-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmss")));
@@ -116,9 +101,9 @@ namespace GhostVersionFunctionApp
                     var repoDir = new DirectoryInfo(repoPath);
                     repoDir.Empty(true);
 
-                    await DownloadGhostVersion(repoDir, funcParams.ReleaseUrl);
+                    await repoDir.DownloadGhostVersion(funcParams.ReleaseUrl);
 
-                    EnrichPackageJson(repoDir);
+                    repoDir.EnrichPackageJson();
 
                     var azureResourcesDir = new DirectoryInfo(Path.Combine(resourcesPath, "AzureDeployment"));
                     azureResourcesDir.CopyFilesRecursively(repoDir);
