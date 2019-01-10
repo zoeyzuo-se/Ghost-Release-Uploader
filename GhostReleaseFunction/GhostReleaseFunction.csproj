@@ -21,10 +21,10 @@
     <None Update="AzureDeployment\azuredeploy.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="AzureDeployment\config.development.json.init">
+    <None Update="AzureDeployment\config.development.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="AzureDeployment\config.production.json.init">
+    <None Update="AzureDeployment\config.production.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="AzureDeployment\db.js">
