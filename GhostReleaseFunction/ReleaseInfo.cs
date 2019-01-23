@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace GhostVersionFunctionApp
 {
-    public class FunctionParams
+    public class ReleaseInfo
     {
         public string ReleaseUrl { get; set; }
         public string ReleaseNotes { get; set; }
