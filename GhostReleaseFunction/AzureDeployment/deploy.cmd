@@ -100,7 +100,10 @@ call :SelectNodeVersion
 :: 3. Install npm packages
 IF EXIST "%DEPLOYMENT_TARGET%\package.json" (
   pushd "%DEPLOYMENT_TARGET%"
+  echo Running npm install
   call :ExecuteCmd !NPM_CMD! config set scripts-prepend-node-path true
+  call :ExecuteCmd !NPM_CMD! config set audit false
+  call :ExecuteCmd !NPM_CMD! config set loglevel silent
   call :ExecuteCmd !NPM_CMD! install --production --no-package-lock
   call :ExecuteCmd !NPM_CMD! prune
   IF !ERRORLEVEL! NEQ 0 goto error
@@ -124,6 +127,7 @@ IF EXIST "%DEPLOYMENT_TARGET%\package.json" (
 :: 4. Handle database creation and migrations.
 IF EXIST "%DEPLOYMENT_TARGET%\db.js" (
   pushd "%DEPLOYMENT_TARGET%"
+  echo Checking database
   call :ExecuteCmd "!NODE_EXE!" db.js
   IF !ERRORLEVEL! NEQ 0 goto error
   popd
