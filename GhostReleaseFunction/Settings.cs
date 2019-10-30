@@ -12,6 +12,7 @@ namespace GhostVersionFunctionApp
         internal string GitRepoOwner { get; set; } = GetEnvironmentVariable("GitRepoOwner");
         internal string GitRepoName { get; set; } = GetEnvironmentVariable("GitRepoName");
         internal string GitRepoBranch { get; set; } = GetEnvironmentVariable("GitRepoBranch");
+        internal string GitRepoBranchV2 { get; set; } = GetEnvironmentVariable("GitRepoBranchV2");
 
         internal string GitAuthorName { get; set; } = GetEnvironmentVariable("GitAuthorName");
         internal string GitAuthorEmail { get; set; } = GetEnvironmentVariable("GitAuthorEmail");

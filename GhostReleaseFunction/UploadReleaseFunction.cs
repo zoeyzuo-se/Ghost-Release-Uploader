@@ -32,7 +32,11 @@ namespace GhostVersionFunctionApp
         [Singleton]
         [FunctionName("ghost-release-processor")]
         public static async Task StartAsync(
-            [TimerTrigger("0 0 16 * * *")]TimerInfo myTimer,
+            [TimerTrigger("0 0 16 * * *"
+            #if DEBUG
+            , RunOnStartup=true
+            #endif
+            )]TimerInfo myTimer,
             [OrchestrationClient]DurableOrchestrationClient starter,
             TraceWriter log)
         {
@@ -45,61 +49,79 @@ namespace GhostVersionFunctionApp
         [FunctionName("release-processor-orchestrator")]
         public static async Task RunAsync([OrchestrationTrigger] DurableOrchestrationContext context, TraceWriter log)
         {
-            var processedRelease = context.CallActivityAsync<ReleaseInfo>("ghost-processed-release", null);
-            var allReleases = context.CallActivityAsync<ReleaseInfo[]>("ghost-all-releases", null);
+            var processedRelease = context.CallActivityAsync<ReleaseInfo>("ghost-processed-release", "3.");
+            var allReleases = context.CallActivityAsync<ReleaseInfo[]>("ghost-all-releases", "3.");
+            var processed2Release = context.CallActivityAsync<ReleaseInfo>("ghost-processed-release", "2.");
+            var all2Releases = context.CallActivityAsync<ReleaseInfo[]>("ghost-all-releases", "2.");
 
-            await Task.WhenAll(processedRelease, allReleases);
+            await Task.WhenAll(processedRelease, allReleases, processed2Release, all2Releases);
 
             var releases = await context.CallActivityAsync<List<ReleaseInfo>>("ghost-remaining-releases", (processedRelease.Result, allReleases.Result));
-
             foreach (var release in releases)
             {
-                await context.CallActivityAsync<string>("ghost-process-release", release);
+                await context.CallActivityAsync<string>("ghost-process-release", (Settings.GitRepoBranch, release));
+            }
+
+            var releases2 = await context.CallActivityAsync<List<ReleaseInfo>>("ghost-remaining-releases", (processed2Release.Result, all2Releases.Result));
+            foreach (var release in releases2)
+            {
+                await context.CallActivityAsync<string>("ghost-process-release", (Settings.GitRepoBranchV2, release));
             }
         }
 
         [FunctionName("ghost-processed-release")]
-        public static async Task<ReleaseInfo> GetProcessedReleaseAsync([ActivityTrigger]object funcParams, TraceWriter log)
+        public static async Task<ReleaseInfo> GetProcessedReleaseAsync([ActivityTrigger]string releaseFilter, TraceWriter log)
         {
             log.Info($"Loading latest processed Ghost release.");
 
-            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases/latest?access_token={Settings.GitPassword}");
-            message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
-            var response = await HttpClient.SendAsync(message);
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            var release = JsonConvert.DeserializeObject<Release>(responseContent, SerializerSettings);
-
-            log.Info($"Latest processed Ghost release: {release.Name}.");
-
-            return new ReleaseInfo()
-            {
-                ReleaseName = release.Name,
-                ReleaseNotes = release.Body,
-                ReleaseUrl = release.Assets.FirstOrDefault()?.BrowserDownloadUrl.AbsoluteUri
-            };
-        }
-
-        [FunctionName("ghost-all-releases")]
-        public static async Task<List<ReleaseInfo>> GetAllReleasesAsync([ActivityTrigger]object funcParams, TraceWriter log)
-        {
-            log.Info($"Loading newest Ghost releases.");
-
-            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/TryGhost/Ghost/releases?access_token={Settings.GitPassword}");
+            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases?access_token={Settings.GitPassword}&per_page=100");
             message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
             var response = await HttpClient.SendAsync(message);
 
             var responseContent = await response.Content.ReadAsStringAsync();
             var releases = JsonConvert.DeserializeObject<List<Release>>(responseContent, SerializerSettings);
 
-            var v2Releases = releases.Where(r => r.Name.StartsWith("2.", StringComparison.OrdinalIgnoreCase)).Select(r => new ReleaseInfo()
+            var release = releases.FirstOrDefault(r => r.Name.StartsWith(releaseFilter, StringComparison.OrdinalIgnoreCase));
+
+            if (release == null)
+            {
+                log.Info($"Latest processed Ghost {releaseFilter}x release: none.");
+
+                return null;
+            }
+            else
+            {
+                log.Info($"Latest processed Ghost {releaseFilter}x release: {release.Name}.");
+
+                return new ReleaseInfo()
+                {
+                    ReleaseName = release.Name,
+                    ReleaseNotes = release.Body,
+                    ReleaseUrl = release.Assets.FirstOrDefault()?.BrowserDownloadUrl.AbsoluteUri
+                };
+            }
+        }
+
+        [FunctionName("ghost-all-releases")]
+        public static async Task<List<ReleaseInfo>> GetAllReleasesAsync([ActivityTrigger]string releaseFilter, TraceWriter log)
+        {
+            log.Info($"Loading newest Ghost {releaseFilter}x releases.");
+
+            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/TryGhost/Ghost/releases?access_token={Settings.GitPassword}&per_page=100");
+            message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
+            var response = await HttpClient.SendAsync(message);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var releases = JsonConvert.DeserializeObject<List<Release>>(responseContent, SerializerSettings);
+
+            var v2Releases = releases.Where(r => r.Name.StartsWith(releaseFilter, StringComparison.OrdinalIgnoreCase)).Select(r => new ReleaseInfo()
             {
                 ReleaseName = r.Name,
                 ReleaseNotes = r.Body,
                 ReleaseUrl = r.Assets.FirstOrDefault()?.BrowserDownloadUrl.AbsoluteUri
             }).ToList();
 
-            log.Info($"Available Ghost releases: {releases.Count}.");
+            log.Info($"Available Ghost {releaseFilter}x releases: {v2Releases.Count}.");
 
             return v2Releases;
         }
@@ -113,11 +135,21 @@ namespace GhostVersionFunctionApp
 
             var remainingReleases = new List<ReleaseInfo>();
 
-            if (!string.IsNullOrEmpty(processedRelease.ReleaseName))
+            if (processedRelease == null)
+            {
+                remainingReleases = allReleases;
+                remainingReleases.Reverse();
+            }
+            else if (!string.IsNullOrEmpty(processedRelease.ReleaseName))
             {
                 var i = allReleases.FindIndex(ar => ar.ReleaseName.Equals(processedRelease.ReleaseName, StringComparison.OrdinalIgnoreCase));
 
-                if (i >= 0)
+                if (i == -1)
+                {
+                    remainingReleases = allReleases;
+                    remainingReleases.Reverse();
+                }
+                else if (i >= 0)
                 {
                     remainingReleases = allReleases.GetRange(0, i);
                     remainingReleases.Reverse();
@@ -134,9 +166,11 @@ namespace GhostVersionFunctionApp
         }
 
         [FunctionName("ghost-process-release")]
-        public static async Task ProcessReleaseAsync([ActivityTrigger]ReleaseInfo funcParams, TraceWriter log, ExecutionContext context)
+        public static async Task ProcessReleaseAsync([ActivityTrigger]Tuple<string, ReleaseInfo> funcParams, TraceWriter log, ExecutionContext context)
         {
-            log.Info($"Processing Ghost release: {funcParams.ReleaseName}.");
+            var (branchName, releaseInfo) = funcParams;
+            log.Info($"Processing Ghost release: {releaseInfo.ReleaseName}.");
+            log.Info($"Processing in branch: {branchName}.");
 
             var resourcesPath = context.FunctionAppDirectory;
             var repoPath = Path.GetFullPath(Path.Combine(resourcesPath, @"..\Target-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmss")));
@@ -144,7 +178,8 @@ namespace GhostVersionFunctionApp
             {
                 var co = new CloneOptions
                 {
-                    CredentialsProvider = Settings.Handler
+                    CredentialsProvider = Settings.Handler,
+                    BranchName = branchName
                 };
                 var gitPath = Repository.Clone($"https://github.com/{Settings.GitRepoOwner}/{Settings.GitRepoName}.git", repoPath, co);
                 using (var repo = new Repository(gitPath))
@@ -152,7 +187,7 @@ namespace GhostVersionFunctionApp
                     var repoDir = new DirectoryInfo(repoPath);
                     repoDir.Empty(true);
 
-                    await repoDir.DownloadGhostVersion(funcParams.ReleaseUrl);
+                    await repoDir.DownloadGhostVersion(releaseInfo.ReleaseUrl);
 
                     repoDir.EnrichPackageJson();
 
@@ -162,14 +197,14 @@ namespace GhostVersionFunctionApp
                     Commands.Stage(repo, "*");
 
                     var author = new Signature(Settings.GitAuthorName, Settings.GitAuthorEmail, DateTime.Now);
-                    var commit = repo.Commit($"Add v{funcParams.ReleaseName}", author, author);
+                    var commit = repo.Commit($"Add v{releaseInfo.ReleaseName}", author, author);
                     var options = new PushOptions
                     {
                         CredentialsProvider = Settings.Handler
                     };
-                    repo.Network.Push(repo.Branches[Settings.GitRepoBranch], options);
+                    repo.Network.Push(repo.Branches[branchName], options);
 
-                    await CreateRelease(funcParams.ReleaseName, funcParams.ReleaseNotes);
+                    await CreateRelease(releaseInfo.ReleaseName, releaseInfo.ReleaseNotes, branchName);
                 }
             }
             catch (Exception e)
@@ -179,16 +214,16 @@ namespace GhostVersionFunctionApp
             }
             finally
             {
-                log.Info($"Finished processing Ghost release: {funcParams.ReleaseName}.");
+                log.Info($"Finished processing Ghost release: {releaseInfo.ReleaseName}.");
             }
         }
 
-        private static async Task CreateRelease(string releaseName, string releaseNotes)
+        private static async Task CreateRelease(string releaseName, string releaseNotes, string branchName)
         {
             var data = new
             {
                 tag_name = releaseName,
-                target_commitish = Settings.GitRepoBranch,
+                target_commitish = branchName,
                 name = releaseName,
                 body = releaseNotes,
                 draft = false,
