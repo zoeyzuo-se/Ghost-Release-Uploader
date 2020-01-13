@@ -38,7 +38,7 @@ namespace GhostVersionFunctionApp
             var packageJsonLocation = Path.Combine(target.FullName, "package.json");
             string json = File.ReadAllText(packageJsonLocation);
             dynamic jsonObj = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
-            jsonObj.engines.node = ((string)jsonObj.engines.node).Split(new[] { "||" }, StringSplitOptions.None).LastOrDefault().Trim();
+            //jsonObj.engines.node = ((string)jsonObj.engines.node).Split(new[] { "||" }, StringSplitOptions.None).LastOrDefault().Trim();
             jsonObj.dependencies.applicationinsights = "^1.0.0";
             string output = Newtonsoft.Json.JsonConvert.SerializeObject(jsonObj, Newtonsoft.Json.Formatting.Indented);
             File.WriteAllText(packageJsonLocation, output);
