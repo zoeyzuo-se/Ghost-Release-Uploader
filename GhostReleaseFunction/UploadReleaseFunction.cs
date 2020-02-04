@@ -74,7 +74,9 @@ namespace GhostVersionFunctionApp
         {
             log.Info($"Loading latest processed Ghost release.");
 
-            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases?access_token={Settings.GitPassword}&per_page=100");
+            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases?per_page=100");
+            var byteArray = Encoding.ASCII.GetBytes($"{Settings.GitUserName}:{Settings.GitPassword}");
+            message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
             message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
             var response = await HttpClient.SendAsync(message);
 
@@ -107,7 +109,9 @@ namespace GhostVersionFunctionApp
         {
             log.Info($"Loading newest Ghost {releaseFilter}x releases.");
 
-            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/TryGhost/Ghost/releases?access_token={Settings.GitPassword}&per_page=100");
+            var message = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/TryGhost/Ghost/releases?per_page=100");
+            var byteArray = Encoding.ASCII.GetBytes($"{Settings.GitUserName}:{Settings.GitPassword}");
+            message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
             message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
             var response = await HttpClient.SendAsync(message);
 
@@ -233,10 +237,12 @@ namespace GhostVersionFunctionApp
 
             // You must set a user agent so that the CRLF requirement on the header parsing is met.
             // Otherwise you will get an excpetion message with "The server committed a protocol violation. Section=ResponseStatusLine"
-            var message = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases?access_token={Settings.GitPassword}")
+            var message = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{Settings.GitRepoOwner}/{Settings.GitRepoName}/releases")
             {
                 Content = stringContent
             };
+            var byteArray = Encoding.ASCII.GetBytes($"{Settings.GitUserName}:{Settings.GitPassword}");
+            message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
             message.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Mozilla", "5.0"));
             await HttpClient.SendAsync(message);
         }
