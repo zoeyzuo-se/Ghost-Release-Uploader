@@ -9,7 +9,11 @@
       "type": "string"
     },
     "siteLocation": {
-      "type": "string"
+      "type": "string",
+      "allowedValues": [
+        "southcentralus","msftwestus","msfteastus","msfteastasia","msftnortheurope","eastus2stage","centralusstage","southafricanorth","westus","australiaeast","brazilsouth","southeastasia","centralus","japanwest","centralindia","uksouth","canadaeast","koreacentral","francecentral","northeurope","westus2","eastus","westindia","eastus2","australiacentral","germanywestcentral","norwayeast","switzerlandnorth","northcentralus","ukwest","australiasoutheast","koreasouth","canadacentral","southindia","westcentralus","eastasiastage","northcentralusstage","eastasia","japaneast","westeurope"
+      ],
+      "defaultValue": "westeurope"
     },
     "sku": {
       "type": "string",
@@ -56,10 +60,12 @@
       "defaultValue": ""
     },
     "repoUrl": {
-      "type": "string"
+      "type": "string",
+      "defaultValue": "https://github.com/<<PutYourGitHubUserHere>>/Ghost-Azure"
     },
     "branch": {
-      "type": "string"
+      "type": "string",
+      "defaultValue": "master"
     }
   },
   "variables": {

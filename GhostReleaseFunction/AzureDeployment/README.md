@@ -9,8 +9,7 @@ I documented my installation process, with additional steps to add Sendgrid, SSL
 In any case I suggest forking my repository into your own, this to avoid changes I make to my repository to negatively impact your installation.
 
 ### One-click deploy
-[![Deploy to Azure](https://azuredeploy.net/deploybutton.png)](https://azuredeploy.net/)
-[![Visualize](http://armviz.io/visualizebutton.png)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FYannickRe%2FGhost-Azure%2Fazure%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FYannickRe%2FGhost-Azure%2Fmaster%2Fazuredeploy.json)
 
 ### Azure App Service Deployment Center
 More info on [Microsoft Docs](https://docs.microsoft.com/en-us/azure/app-service/deploy-continuous-deployment#deploy-continuously-from-github)
